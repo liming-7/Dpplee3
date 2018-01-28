@@ -10,8 +10,10 @@ except ImportError:
     import urllib2
 
 from rwlock import RWLock
+#import optimizer
 
 class ParamServer:
+    ''' ParamServer usually works on master'''
 
     def __init__(self, network, mode, optimizer, lock):
         self.network = network
@@ -55,10 +57,10 @@ class ParamServer:
             if self.mode == 'asynchronous':
                 self.lock.acquire_write()
 
-            if not self.master_network.built:
-                self.master_network.build()
+            if not self.network.built:
+                self.network.build()
 
-            constraints = self.master_network.model.constraints
+            constraints = self.network.model.constraints
 
             if len(constraints) == 0:
                 def empty(a): return a
