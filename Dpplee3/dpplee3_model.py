@@ -19,6 +19,7 @@ from rwlock import RWLock
 import function
 from param_server import ParamServer
 from pg_weights import Get_post_weights
+from worker import AsynchronousWorker, SynchronousWorker
 
 class Dpplee3:
     def __init__(self, sc, model, server_optimizer, worker_optimizer, granularity, mode, worker_num):
@@ -56,13 +57,11 @@ class Dpplee3:
         '''
         Wrap train method
         '''
-        ##模型建立
-
         if self.mode in ['asynchronous', 'hogwild']:
-            '''start a Flask web service to handle asyn parameter server'''
+            '''start a Flask web service to handle asynchronous parameter server'''
             self.paramserver = ParamServer(self.network, self.mode, self.master_optimizer, self.lock)
-
-            worker = AsynchronousSparkWorker(
+            self.paramserver.start_server()
+            worker = AsynchronousWorker(
                 yaml, train_config, self.frequency, master_url,
                 self.master_optimizer, self.master_loss, self.master_metrics, self.custom_objects
             )
@@ -80,4 +79,4 @@ class Dpplee3:
         self.master_network.set_weights(new_parameters)
 
         if self.mode in ['asynchronous', 'hogwild']:
-            self.stop_server()
+            self.paramserver.stop_server()
