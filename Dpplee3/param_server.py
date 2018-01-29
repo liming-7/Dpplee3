@@ -12,7 +12,7 @@ except ImportError:
 from rwlock import RWLock
 #import optimizer
 
-class ParamServer:
+class ParamServer(object):
     ''' ParamServer usually works on master'''
 
     def __init__(self, network, mode, optimizer, lock):

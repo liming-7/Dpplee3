@@ -6,7 +6,7 @@ try:
 except ImportError:
     import urllib2
 
-class Get_post_weights:
+class Get_post_weights(object):
     def __init__(master_url, sparkAppname)
     '''
     master_url is master_url at most time, to reduce the net costs

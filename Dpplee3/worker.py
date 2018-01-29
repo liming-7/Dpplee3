@@ -4,7 +4,7 @@ define the worker function
 from __future__ import absolute_import
 
 
-class AsynchronousWorker:
+class AsynchronousWorker(object):
     '''
     distribute to spark worker by mapPartitions, works on spark worker
     '''
@@ -14,7 +14,7 @@ class AsynchronousWorker:
     def train():
         pass
 
-class SynchronousWorker:
+class SynchronousWorker(object):
     '''
     distribute to spark worker by mapPartitions, works on spark worker
     '''
