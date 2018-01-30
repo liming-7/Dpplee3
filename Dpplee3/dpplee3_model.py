@@ -21,9 +21,10 @@ from param_server import ParamServer
 from pg_weights import Get_post_weights
 from worker import AsynchronousWorker, SynchronousWorker
 
-class Dpplee3:
+class Dpplee3(object):
     def __init__(self, sc, model, server_optimizer, worker_optimizer, granularity, mode, worker_num):
         self.spark_context = sc
+        self.master_network = model
         self.network = model
         self.mode = mode
         self.server_optimizer = server_optimizer
@@ -42,6 +43,19 @@ class Dpplee3:
         master_url = socket.gethostbyname(socket.gethostname()) + ':5000'
         return master_url
 
+    def network2serial(model):
+        '''
+        serialize the model network
+        '''
+        return pickle.dumps(model)
+
+    def serial2network(serialized_model):
+        '''
+        get network from serialized data
+        '''
+        return pickle.loads(serialize_model)
+
+
     def train(self, rdd, epoch, batch_size):
         '''
         Distributed train using spark
@@ -49,34 +63,39 @@ class Dpplee3:
         '''
         rdd = rdd.repartition(self.worker_num)
         master_url = self.determine_master()
-
+        get_post = Get_post_state_dict(master_url)
         if self.mode in ['asynchronous', 'synchronous', 'hogwild']:
-            self._train(rdd, epoch, batch_size, master_url)
+            self._train(rdd, epoch, batch_size, master_url, get_post)
 
-    def _train(self, rdd, epoch, batch_size, master_url):
+    def _train(self, rdd, epoch, batch_size, master_url, get_post):
         '''
         Wrap train method
         '''
+        serialized_network = network2serial(self.network)
+
         if self.mode in ['asynchronous', 'hogwild']:
             '''start a Flask web service to handle asynchronous parameter server'''
-            self.paramserver = ParamServer(self.network, self.mode, self.master_optimizer, self.lock)
+            self.paramserver = ParamServer(master_network, self.mode, self.master_optimizer, self.lock)
             self.paramserver.start_server()
+
             worker = AsynchronousWorker(
-                yaml, train_config, self.frequency, master_url,
-                self.master_optimizer, self.master_loss, self.master_metrics, self.custom_objects
-            )
+                serialized_network, self.frequency, master_url,
+                self.master_optimizer, self.master_loss, self.master_metrics)
             rdd.mapPartitions(worker.train).collect()
-            new_parameters = get_server_weights(master_url)
+            new_state_dict = get_post.get_server_state_dict()
         elif self.mode == 'synchronous':
-            init = self.master_network.get_weights()
-            parameters = self.spark_context.broadcast(init)
-            worker = SparkWorker(yaml, parameters, train_config)
+            '''don't need asynchronous parameter server'''
+            '''state_dict need serialize or not'''
+            state_dict = self.master_network.state_dict()
+            parameters = self.spark_context.broadcast(state_dict)
+            worker = SparkWorker(yaml, state_dict, train_config)
             deltas = rdd.mapPartitions(worker.train).collect()
             new_parameters = self.master_network.get_weights()
             for delta in deltas:
                 constraints = self.master_network.constraints
                 new_parameters = self.optimizer.get_updates(self.weights, constraints, delta)
-        self.master_network.set_weights(new_parameters)
+
+        self.master_network.load_state_dict(new_state_dict)
 
         if self.mode in ['asynchronous', 'hogwild']:
             self.paramserver.stop_server()
