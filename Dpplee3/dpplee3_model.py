@@ -65,7 +65,7 @@ class Dpplee3(object):
         master_url = self.determine_master()
         get_post = Get_post_state_dict(master_url)
         if self.mode in ['asynchronous', 'synchronous', 'hogwild']:
-            self._train(rdd, epoch, batch_size, master_url, get_post)
+            self._train(rdd, self.epoch, batch_size, master_url, get_post)
 
     def _train(self, rdd, epoch, batch_size, master_url, get_post):
         '''
