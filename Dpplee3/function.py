@@ -5,6 +5,13 @@ from __future__ import absolute_import
 
 import numpy as np
 
+def compute_updates(p1, p2):
+    '''
+    compute updates or the changes of two state_dict.
+    '''
+    pass
+
+    
 def add_params(p1, p2):
     '''
     Add two lists of parameters

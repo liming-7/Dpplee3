@@ -8,15 +8,15 @@ except ImportError:
 
 class Get_post_state_dict(object):
 
-    def __init__(master_url, sparkAppname = None)
-    '''
-    master_url is master_url at most time, to reduce the net costs
-    sparkAppname is for after
-    '''
+    def __init__(self, master_url, sparkAppname = None)
+        '''
+        master_url is master_url at most time, to reduce the net costs
+        sparkAppname is for after
+        '''
         self.url = master_url
         self.sparkAppname = sparkAppname ##用于以后功能
 
-    def get_server_state_dict(url=self.url):
+    def get_server_state_dict(self, url=self.url):
         '''
         get weights from parameter server
         '''
@@ -26,7 +26,7 @@ class Get_post_state_dict(object):
         weights = pickle.loads(data)
         return state_dict
 
-    def post_delta_to_server(delta, url=self.url):
+    def post_updates_to_server(self, delta, url=self.url):
         '''
         post delta to parameter server and waiting for update
         '''
