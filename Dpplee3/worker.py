@@ -14,13 +14,13 @@ from torch.autograd import Variable
 import function as func
 
 
-def get_loss(self, loss_function, output, label):
+def get_loss(loss_function, output, label):
     '''
     get objective loss of model and backprograte to compute gradients
     '''
     pass
 
-def get_optimizer(self, optimizer, optimizer_config, params):
+def get_optimizer(optimizer, optimizer_config, params):
     '''
     get the optimizer of worker model
     '''
@@ -92,7 +92,7 @@ class AsynchronousWorker(object):
                     data = Variable(data)
                     target = Variable(target)
                     optimizer.zero_grad()
-                    output = model(data)
+                    output = model(data)``
                     loss = get_loss(self.loss_function, output, target)
                     loss.backward()
                     optimizer.step()
@@ -100,7 +100,7 @@ class AsynchronousWorker(object):
                     updates = func.compute_updates(state_dict_before_training, state_dict_after_training)
                     self.get_post.post_updates_to_server(updates)
         else:
-            print (''please choose the frequency of training'')
+            print ('please choose the frequency of training')
 
         yield []
 
@@ -109,8 +109,9 @@ class SynchronousWorker(object):
     '''
     distribute to spark worker by mapPartitions, works on spark worker
     '''
-    def __init__(self, serialized_network, worker_optimizer, train_config, optimizer_config, loss_function):
+    def __init__(self, serialized_network, state_dict_before_training, worker_optimizer, train_config, optimizer_config, loss_function):
         self.serialized_network = serialized_network
+        self.state_dict_before_training = state_dict_before_training
         self.optimizer = worker_optimizer
         self.train_config = train_config
         self.optimizer_config = optimizer_config
@@ -119,6 +120,7 @@ class SynchronousWorker(object):
     def train(self, data_iterator):
         '''
         train a pytorch model and post the updates to the master
+        grain epoch only, because fine-grained hard to impeletation
         '''
         data_all, target_all = tee(data_iterator, 2)
         x_train = np.asarray([x for x, y in data_all])
@@ -133,13 +135,23 @@ class SynchronousWorker(object):
         sample_num = x_train.shape[0]
         batch_num = int(np.ceil(sample_num, float(batch_size)))
 
-        for epoch in range(epoch_num):
-            pass
-        
+        model.load_state_dict(self.state_dict)
+        optimizer = get_optimizer(self.worker_optimizer, self.optimizer_config, model.parameters())
+        model.train()
+        for idx in range(batch_num):
+            optimizer.zero_grad()
 
+            data = x_train[idx*batch_size:min((idx+1)*batch_size, sample_num)]
+            target = y_train[idx*batch_size:min((idx+1)*batch_size, sample_num)]
+            data = Variable(data)
+            target = Variable(target)
 
+            output = model(data)
+            loss = get_loss(self.loss_function=, output, target)
+            loss.backward()
+            optimizer.step()
 
-
-
+        state_dict_after_training = model.state_dict()
+        updates = compute_updates(state_dict_before_training, state_dict_after_training)
 
         yield updates

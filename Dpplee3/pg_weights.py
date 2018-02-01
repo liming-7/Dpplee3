@@ -14,7 +14,7 @@ class Get_post_state_dict(object):
         sparkAppname is for after
         '''
         self.url = master_url
-        self.sparkAppname = sparkAppname ##用于以后功能
+        self.sparkAppname = sparkAppname '''for after usage'''
 
     def get_server_state_dict(self, url=self.url):
         '''

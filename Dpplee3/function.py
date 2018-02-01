@@ -1,4 +1,5 @@
 '''
+copyright@uestcliming
 functions of parameter
 '''
 from __future__ import absolute_import
@@ -11,7 +12,7 @@ def compute_updates(p1, p2):
     '''
     pass
 
-    
+
 def add_params(p1, p2):
     '''
     Add two lists of parameters

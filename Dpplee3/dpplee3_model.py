@@ -83,17 +83,18 @@ class Dpplee3(object):
                 self.master_optimizer, self.master_loss, self.master_metrics)
             rdd.mapPartitions(worker.train).collect()
             new_state_dict = get_post.get_server_state_dict()
+
         elif self.mode == 'synchronous':
             '''don't need asynchronous parameter server'''
             '''state_dict need serialize or not'''
             state_dict = self.master_network.state_dict()
-            parameters = self.spark_context.broadcast(state_dict)
-            worker = SparkWorker(yaml, state_dict, train_config)
+            state_dict = self.spark_context.broadcast(state_dict)
+            worker = SparkWorker(serialized_network, state_dict, train_config)
             deltas = rdd.mapPartitions(worker.train).collect()
-            new_parameters = self.master_network.get_weights()
+            new_state_dict = self.master_network.state_dict()
             for delta in deltas:
                 constraints = self.master_network.constraints
-                new_parameters = self.optimizer.get_updates(self.weights, constraints, delta)
+                new_parameters = self.optimizer.get_updates(self.weights, delta)
 
         self.master_network.load_state_dict(new_state_dict)
 
