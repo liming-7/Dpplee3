@@ -5,12 +5,17 @@ functions of parameter
 from __future__ import absolute_import
 
 import numpy as np
+import collections
 
 def compute_updates(p1, p2):
     '''
     compute updates or the changes of two state_dict.
     '''
-    pass
+    res = collections.OrderedDict()
+    for k,v in p1.items():
+        res[k]=p2[k]-p1[k]
+    return res
+
 
 
 def add_params(p1, p2):

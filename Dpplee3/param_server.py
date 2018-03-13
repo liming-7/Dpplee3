@@ -10,6 +10,7 @@ except ImportError:
     import urllib2
 
 from rwlock import RWLock
+import optimizer
 #import optimizer
 
 class ParamServer(object):
@@ -17,7 +18,7 @@ class ParamServer(object):
 
     def __init__(self, network, mode, optimizer, lock):
         self.network = network
-        self.weights = network.weights   #pytorch 获取model的weights
+        self.state_dict = network.state_dict   #pytorch 获取model的weights
         self.mode = mode
         self.optimizer = optimizer
         self.lock = lock
@@ -45,7 +46,7 @@ class ParamServer(object):
         def get_parameters():
             if self.mode == 'asynchronous':
                 self.lock.acquire_read()
-            self.pickled_weights = pickle.dumps(self.weights, -1)
+            self.pickled_weights = pickle.dumps(self.state_dict, -1)
             pickled_weights = self.pickled_weights
             if self.mode == 'asynchronous':
                 self.lock.release()
@@ -53,20 +54,15 @@ class ParamServer(object):
 
         @app.route('/update', methods=['POST'])
         def update_parameters():
-            delta = pickle.loads(request.data)
+            delta = pickle.loads(request.data) #get the update infomation from workers
             if self.mode == 'asynchronous':
                 self.lock.acquire_write()
 
-            if not self.network.built:
-                self.network.build()
-
-            constraints = self.network.model.constraints
-
-            if len(constraints) == 0:
-                def empty(a): return a
-                constraints = [empty for x in self.weights]
-
-            self.weights = self.optimizer.get_updates(self.weights, constraints, delta)
+            self.network.train() #set the training or not training, is useful for batchnorm and dropout
+            self.optimizer = optimizer.SGD(self.network.parameters(), lr=0.001, momentum=0.5)
+            optimizer.zero_grad()
+            self.optimizer.replace_grad(delta)
+            self.optimizer.step()
 
             if self.mode == 'asynchronous':
                 self.lock.release()
