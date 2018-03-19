@@ -14,7 +14,7 @@ class Get_post_state_dict(object):
         sparkAppname is for after
         """
         self.url = master_url
-        self.sparkAppname = sparkAppname 
+        self.sparkAppname = sparkAppname
         '''for after usage'''
 
     def get_server_state_dict(self):
@@ -35,4 +35,3 @@ class Get_post_state_dict(object):
         request.add_header('Content-Type', 'application/dpplee3')
         data = pickle.dumps(delta, -1)
         return urllib2.urlopen(request, data).read()
-

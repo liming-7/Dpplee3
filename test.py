@@ -1,4 +1,7 @@
 import optimizer
+# import six.moves.cPickle as pickle
+import pickle
+import json
 class A:
 	def __init__(self,a,b):
 		self.a = a
@@ -12,7 +15,13 @@ class A:
 		self.ac(d)
 		return 1
 
-C = A(1,2)
-C.bc(3)
-print(C.a)
+a=pickle.dumps(A)
+print(type(a))
+b=pickle.loads(a)
+print(b)
+print(type(b))
 
+# j=json.dumps(a)
+# print(type(j))
+# ja=json.loads(j)
+# print(type(ja))
