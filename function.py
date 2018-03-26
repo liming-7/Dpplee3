@@ -27,19 +27,9 @@ def add_params(p1, p2):
     '''
     Add two lists of parameters
     '''
-    res = []
-    for x, y in zip(p1, p2):
-        res.append(x+y)
-    return res
-
-
-def subtract_params(p1, p2):
-    '''
-    Subtract two lists of parameters
-    '''
-    res = []
-    for x, y in zip(p1, p2):
-        res.append(x-y)
+    res = collections.OrderedDict()
+    for k,v in p1.items():
+        res[k]=p1[k]+p2[k]
     return res
 
 
@@ -69,6 +59,7 @@ def get_loss(loss_function, output, label):
     '''
     if not isinstance(loss_function, str):
         raise TypeError('loss_function should be str object')
+    label =np.asarray(label)
 
     if loss_function == 'binary_cross_entropy':
         loss = F.binary_cross_entropy(output, label)
@@ -85,6 +76,7 @@ def get_loss(loss_function, output, label):
     elif loss_function == 'multi_margin_loss':
         loss = F.multi_margin_loss(output, label)
     elif loss_function == 'nll_loss':
+        label = Variable(torch.LongTensor(label))
         loss = F.nll_loss(output, label)
     elif loss_function == 'binary_cross_entropy_with_logits':
         loss = F.binary_cross_entropy_with_logits(output, label)

@@ -23,57 +23,47 @@ from .pg_weights import Get_post_state_dict
 # from Dpplee3.worker import AsynchronousWorker, SynchronousWorker
 
 from .function import compute_updates, get_loss, get_optimizer
-from .optimizer import SGD 
+from .optimizer import SGD
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.functional as torchF
 import torch.optim as optim
 from torch.autograd import Variable
 import math
 
 
-def get_server_state_dict(master_url='localhost:5000'):
-    '''
-    Retrieve master weights from parameter server
-    '''
-    request = urllib2.Request('http://{0}/parameters'.format(master_url),
-                              headers={'Content-Type': 'application/dpplee3'})
-    ret = urllib2.urlopen(request).read()
-    weights = pickle.loads(ret)
-    return weights
-
-
-def put_deltas_to_server(delta, master_url='localhost:5000'):
-    '''
-    Update master parameters with deltas from training process
-    '''
-    request = urllib2.Request('http://{0}/worker_updates'.format(master_url),
-                              pickle.dumps(delta, -1), headers={'Content-Type': 'application/dpplee3'})
-    return urllib2.urlopen(request).read()
-
-
-
 class Dpplee3_model(object):
-    def __init__(self, sc, model, frequency, server_optimizer, worker_optimizer, loss_function, granularity, mode, worker_num):
+    def __init__(self, sc, model, frequency, server_optimizer, worker_optimizer, loss_function, mode, worker_num, frequency_num=1, save_path = None):
         self.spark_context = sc
         self.master_network = model
         self.state_dict = model.state_dict()
         self.network = model
         self.frequency = frequency
         self.mode = mode
-        self.server_optimizer = server_optimizer
         self.worker_optimizer = worker_optimizer
         self.loss_function = loss_function
-        self.granularity = granularity  #grain
         self.mode = mode
         self.worker_num = worker_num
-
+        self.frequency_num = frequency_num  #grain
         self.lock = RWLock()
-        torch.save(model, 'model.pkl')
-        print('----model save------')
+        # torch.save(model, 'model.pkl')
+        # print('----model save------')
+        if save_path:
+            self.save_path = save_path
 
+    def set_server_optimizer(server_optimizer, **arg):
+        ''''''
+        self.server_optimizer = server_optimizer
+        server_optimizer_config = arg
+        self.optimizer = get_optimizer(self.server_optimizer, server_optimizer_config, self.master_network.parameters())
+        return server_optimizer_config
+
+    def get_worker_optimizer(worker_optimizer, **arg):
+        ''''''
+        self.worker_optimizer = worker_optimizer
+        self.worker_optimizer_config = arg
+        return self.worker_optimizer_config
 
     def start_server(self):
         ''' Start parameter server'''
@@ -107,18 +97,18 @@ class Dpplee3_model(object):
             return pickled_state_dict
 
         # @app.route('/model', methods=['GET'])
-        # def get_model_structure():
+        # def get_model_structure()
 
         @app.route('/worker_updates', methods=['POST'])
         def update_parameters():
-            delta = pickle.loads(request.data) #get the update infomation from workers
+            updates = pickle.loads(request.data) #get the update infomation from workers
             if self.mode == 'asynchronous':
                 self.lock.acquire_write()
 
-            self.master_network.train() #set the training or not training, is useful for batchnorm and dropout
-            self.optimizer = SGD(self.master_network.parameters(), lr=0.001, momentum=0.5)
+            self.master_network.train() #set the training or not training, is responsiable for batchnorm and dropout
+            # self.optimizer = SGD(self.master_network.parameters(), lr=0.001, momentum=0.5)
             self.optimizer.zero_grad()
-            self.optimizer.replace_grad(delta)
+            self.optimizer.replace_grad(updates)
             self.optimizer.step()
             self.state_dict = self.master_network.state_dict()
 
@@ -143,18 +133,8 @@ class Dpplee3_model(object):
         '''
         serialize the model network
         '''
-        # return pickle.dumps(model,-1)
+        return pickle.dumps(model,-1)
 
-        f = open('model.pkl', 'rb')
-        print('-----open model-----')
-        d =f.read()
-
-        f1 = open('modelw.pkl', 'wb')
-        f1.write(d)
-        f1.close()
-        modelt = torch.load('modelw.pkl')
-        print(modelt)
-        return d
 
     def serial2network(self, serialized_model):
         '''
@@ -162,24 +142,12 @@ class Dpplee3_model(object):
         '''
         return pickle.loads(serialize_model)
 
-    # def get_network_structure(self, network):
-    #     cont = 0
-    #     for i in network.named_modules():
-
-
     def get_worker_train_config(self, nb_epoch, batch_size):
         train_config = {}
         train_config['epoch'] = nb_epoch
         train_config['batch_size'] = batch_size
 
         return train_config
-
-    def get_worker_optimizer_config(self, lr, momentum):
-        optimizer_config = {}
-        optimizer_config['lr'] = lr
-        optimizer_config['momentum'] = momentum
-        return optimizer_config
-
 
 
     def train(self, rdd, epoch, batch_size):
@@ -191,7 +159,7 @@ class Dpplee3_model(object):
         master_url = self.determine_master()
         # print(master_url)
         # torch.save(self.network, 'hdfs://Master:9000/model.pkl')
-        print('--------ABCDEFGHIJKLMN--------')
+        print('--------START TRAINING--------')
         # print('store pkl')
         #model = torch.load('hdfs://192.168.0.104:9000/model.pkl')
         # print(model)
@@ -205,8 +173,8 @@ class Dpplee3_model(object):
         '''
         Wrap train method
         '''
-        serialized_network = self.network2serial(self.network)
-        print('----ggffgg',len(serialized_network))
+        # serialized_network = self.network2serial(self.network)
+        # print('----ggffgg',len(serialized_network))
 
         if self.mode in ['asynchronous', 'hogwild']:
             '''start a Flask web service to handle asynchronous parameter server'''
@@ -214,53 +182,44 @@ class Dpplee3_model(object):
             self.start_server()
 
             train_config = self.get_worker_train_config(epoch, batch_size)
-            optimizer_config = self.get_worker_optimizer_config(0.01,0.5)
+            optimizer_config = self.worker_optimizer_config
 
             worker = AsynchronousWorker(
                 self.network, self.frequency, master_url,
-                self.worker_optimizer, train_config, optimizer_config, self.loss_function)
-            # worker = A(7)
+                self.worker_optimizer, train_config, optimizer_config, self.loss_function, self.frequency_num)
             print(worker)
             rdd.mapPartitions(worker.train).collect()
-            print('11111111111111111111111111')
-            new_state_dict = get_post.get_server_state_dict()
+            print('------------------train done------------------')
+            # new_state_dict = get_post.get_server_state_dict()
 
         elif self.mode == 'synchronous':
             '''don't need asynchronous parameter server'''
-            '''state_dict need serialize or not'''
             state_dict = self.master_network.state_dict()
             state_dict = self.spark_context.broadcast(state_dict)
             train_config = self.get_worker_train_config(epoch, batch_size)
-            optimizer_config = self.get_worker_optimizer_config()
+            optimizer_config = self.worker_optimizer_config
 
-            # worker = SynchronousWorker(serialized_network, state_dict, self.worker_optimizer, train_config, optimizer_config, self.loss_function)
-            worker = A(7)
+            worker = SynchronousWorker(self.network, state_dict, self.worker_optimizer, train_config, optimizer_config, self.loss_function)
             updates = rdd.mapPartitions(worker.train).collect()
-            new_state_dict = self.master_network.state_dict()
-            for delta in deltas:
-                constraints = self.master_network.constraints
-                new_parameters = self.optimizer.get_updates(self.weights, delta)
+            # self.master_network.train()
+            for update in updates:
+                self.master_network.train()
+                self.optimizer.zero_grad()
+                self.optimizer.replace_grad(update)
+                self.optimizer.step()
 
-        self.master_network.load_state_dict(new_state_dict)
+        torch.save(self.master_network, self.save_path)
 
         if self.mode in ['asynchronous', 'hogwild']:
             self.stop_server()
 
-class A(object):
-    def __init__(self, a):
-        self.a =a
-
-    def train(self, data_iterator):
-        a = 4
-
-        yield []
 
 class AsynchronousWorker(object):
     '''
     distribute to spark worker by mapPartitions, works on spark worker
     '''
-    def __init__(self, serialized_network, frequency, master_url, worker_optimizer, train_config, optimizer_config, loss_function, frequency_num=1):
-        self.serialized_network = serialized_network
+    def __init__(self, network, frequency, master_url, worker_optimizer, train_config, optimizer_config, loss_function, frequency_num):
+        self.network = network
         self.frequency = frequency
         self.frequency_num = frequency_num  #control the grain of the training procedure.
         self.master_url = master_url
@@ -269,8 +228,7 @@ class AsynchronousWorker(object):
         self.optimizer_config = optimizer_config
         self.get_post = Get_post_state_dict(master_url)
         self.loss_function = loss_function
-        print('----initialing----')
-
+        print('----worker initialing----')
 
     def train(self, data_iterator):
         '''
@@ -290,8 +248,7 @@ class AsynchronousWorker(object):
         # f.close()
         # print('-----close f')
         # print(self.serialized_network.state_dict())
-        # print('`````````')
-
+        # print('`````````'
 
         if x_train.size == 0:
             return
@@ -308,26 +265,25 @@ class AsynchronousWorker(object):
 
         # ]))
         model = self.serialized_network
-        print(model)
         epoch_num = self.train_config['epoch']
         batch_size = self.train_config['batch_size']
         sample_num = x_train.shape[0]
         batch_num = int(np.ceil(sample_num/batch_size))-5
 
         '''grained of updates, frequency_num controls more concise grain of asyn training, leave for future work.'''
+        cnt = 0
         if self.frequency == 'epoch':
             for epoch in range(epoch_num):
                 state_dict_before_training = self.get_post.get_server_state_dict()
                 print('get_server_state_dict')
-                # print(state_dict_before_training, 'BBBBBBBBBBBBBB')
                 model.load_state_dict(state_dict_before_training)
                 optimizer = get_optimizer(self.worker_optimizer, self.optimizer_config, model.parameters())
                 model.train()
                 for idx in range(batch_num):
                     data = x_train[idx*batch_size : min((idx+1)*batch_size, sample_num)]
                     target = y_train[idx*batch_size : min((idx+1)*batch_size, sample_num)]
-                    print(target)
-                    print(type(target))
+                    # print(target)
+                    # print(type(target))
                     data = Variable(torch.from_numpy(data))
                     target = Variable(torch.from_numpy(target))
                     # print(data.size())
@@ -362,7 +318,6 @@ class AsynchronousWorker(object):
                     target = y_train[idx*batch_size: min((idx+1)*batch_size, sample_num)]
                     data = Variable(torch.Tensor(data))
                     target = Variable(torch.Tensor(target))
-                    print(type(target))
                     optimizer.zero_grad()
                     output = model(data)
                     loss = get_loss(self.loss_function, output, target)
@@ -381,8 +336,8 @@ class SynchronousWorker(object):
     '''
     distribute to spark worker by mapPartitions, works on spark worker
     '''
-    def __init__(self, serialized_network, state_dict_before_training, worker_optimizer, train_config, optimizer_config, loss_function):
-        self.serialized_network = serialized_network
+    def __init__(self, network, state_dict_before_training, worker_optimizer, train_config, optimizer_config, loss_function):
+        self.network = network
         self.state_dict_before_training = state_dict_before_training
         self.optimizer = worker_optimizer
         self.train_config = train_config
@@ -400,20 +355,12 @@ class SynchronousWorker(object):
 
         if x_train.shape[0] == 0:
             return
-        print('xxxx')
-        f = open('mdoel.pkl','w')
-        f.write(serialized_network)
-        f.close()
-        print('aaaaaa')
-        model = torch.load('model.pkl')
-        print('modeldone')
         # model = pickle.loads(self.serialized_network)
         # model = self.serialized_network
         epoch_num = self.train_config['epoch']
         batch_size = self.train_config['batch_size']
         sample_num = x_train.shape[0]
-        batch_num = int(math.ceil(sample_num/float(batch_size)))
-        yield (type(self.state_dict_before_training))
+        batch_num = int(math.ceil(sample_num/float(batch_size)))-5
 
         model.load_state_dict(self.state_dict)
         optimizer = get_optimizer(self.worker_optimizer, self.optimizer_config, model.parameters())
@@ -423,8 +370,8 @@ class SynchronousWorker(object):
 
             data = x_train[idx*batch_size:min((idx+1)*batch_size, sample_num)]
             target = y_train[idx*batch_size:min((idx+1)*batch_size, sample_num)]
-            data = Variable(data)
-            target = Variable(target)
+            data = Variable(torch.from_numpy(data))
+            target = Variable(torch.from_numpy(target))
 
             output = model(data)
             loss = get_loss(self.loss_function, output, target)
