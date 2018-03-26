@@ -8,7 +8,7 @@ import numpy as np
 import collections
 import torch
 import torch.nn as nn
-import torch.functional as F
+import torch.nn.functional as F
 import torch.optim as optim
 from torch.autograd import Variable
 
@@ -18,7 +18,7 @@ def compute_updates(p1, p2):
     '''
     res = collections.OrderedDict()
     for k,v in p1.items():
-        res[k]=p2[k]-p1[k]
+        res[k]=p1[k]-p2[k]
     return res
 
 
@@ -73,9 +73,9 @@ def get_loss(loss_function, output, label):
     if loss_function == 'binary_cross_entropy':
         loss = F.binary_cross_entropy(output, label)
     elif loss_function == 'poisson_nll_loss':
-        loss = F.poisson_nll_loss(output, target)
+        loss = F.poisson_nll_loss(output, label)
     elif loss_function == 'cross_entropy':
-        loss = F.cross_entropy(output, target)
+        loss = F.cross_entropy(output, label)
     elif loss_function == 'hinge_embedding_loss':
         loss = F.hinge_embedding_loss(output, label)
     elif loss_function == 'margin_ranking_loss':

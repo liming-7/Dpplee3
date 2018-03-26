@@ -3,7 +3,7 @@ from __future__ import absolute_import
 from pyspark.mllib.regression import LabeledPoint
 import numpy as np
 
-from Dpplee3.adapter import to_vector, from_vector
+from .adapter import to_vector, from_vector
 
 
 def to_simple_rdd(sc, features, labels):

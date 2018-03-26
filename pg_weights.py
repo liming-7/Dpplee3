@@ -5,6 +5,8 @@ try:
     import urllib.request as urllib2
 except ImportError:
     import urllib2
+import six.moves.cPickle as pickle
+
 
 class Get_post_state_dict(object):
 
@@ -24,7 +26,7 @@ class Get_post_state_dict(object):
         request = urllib2.Request('http://{0}/parameters'.format(self.url))
         request.add_header('Content-Type', 'application/dpplee3')
         data = urllib2.urlopen(request).read()
-        weights = pickle.loads(data)
+        state_dict = pickle.loads(data)
         return state_dict
 
     def post_updates_to_server(self, delta):
