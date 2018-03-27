@@ -52,18 +52,21 @@ class Dpplee3_model(object):
         if save_path:
             self.save_path = save_path
 
-    def set_server_optimizer(server_optimizer, **arg):
+    def set_server_optimizer(self, server_optimizer, **arg):
         ''''''
         self.server_optimizer = server_optimizer
         server_optimizer_config = arg
         self.optimizer = get_optimizer(self.server_optimizer, server_optimizer_config, self.master_network.parameters())
         return server_optimizer_config
 
-    def get_worker_optimizer(worker_optimizer, **arg):
+    def set_worker_optimizer(self, worker_optimizer, **arg):
         ''''''
         self.worker_optimizer = worker_optimizer
         self.worker_optimizer_config = arg
         return self.worker_optimizer_config
+
+    def enable_tensorboard(self):
+        pass
 
     def start_server(self):
         ''' Start parameter server'''
@@ -270,6 +273,9 @@ class AsynchronousWorker(object):
         sample_num = x_train.shape[0]
         batch_num = int(np.ceil(sample_num/batch_size))-5
 
+        use_gpu = torch.cuda.is_available()
+        if use_gpu:
+            model.cuda()
         '''grained of updates, frequency_num controls more concise grain of asyn training, leave for future work.'''
         cnt = 0
         if self.frequency == 'epoch':
@@ -284,6 +290,10 @@ class AsynchronousWorker(object):
                     target = y_train[idx*batch_size : min((idx+1)*batch_size, sample_num)]
                     # print(target)
                     # print(type(target))
+                    if use_gpu:
+                        data = torch.from_numpy(data).cuda()
+                        target = torch.from_numpy(target).cuda()
+
                     data = Variable(torch.from_numpy(data))
                     target = Variable(torch.from_numpy(target))
                     # print(data.size())
@@ -293,7 +303,7 @@ class AsynchronousWorker(object):
                     output = model(data)
                     # print(output)
                     # print(target)
-                    loss = get_loss(self.loss_function, output, target)
+                    loss = get_loss(self.loss_function, output, target, use_gpu)
                     # loss = F.nll_loss(output, target)
                     # print(idx, '     ',loss)
                     loss.backward()
@@ -320,6 +330,9 @@ class AsynchronousWorker(object):
                     model.train()
                     data = x_train[idx*batch_size: min((idx+1)*batch_size, sample_num)]
                     target = y_train[idx*batch_size: min((idx+1)*batch_size, sample_num)]
+                    if use_gpu:
+                        data = torch.from_numpy(data).cuda()
+                        target = torch.from_numpy(target).cuda()
                     data = Variable(torch.Tensor(data))
                     target = Variable(torch.Tensor(target))
                     optimizer.zero_grad()
@@ -335,6 +348,7 @@ class AsynchronousWorker(object):
                         state_dict_after_training = model.state_dict()
                         updates = compute_updates(state_dict_before_training, state_dict_after_training)
                         self.get_post.post_updates_to_server(updates)
+                        cnt = 0
         else:
             print ('please choose the frequency of training')
 

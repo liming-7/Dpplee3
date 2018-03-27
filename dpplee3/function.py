@@ -52,7 +52,7 @@ def divide_by(array_list, num_workers):
         array_list[i] /= num_workers
     return array_list
 
-def get_loss(loss_function, output, label):
+def get_loss(loss_function, output, label, use_gpu):
     '''
     get objective loss of model and backprograte to compute gradients
     some loss function not impelement
@@ -76,6 +76,8 @@ def get_loss(loss_function, output, label):
     elif loss_function == 'multi_margin_loss':
         loss = F.multi_margin_loss(output, label)
     elif loss_function == 'nll_loss':
+        if use_gpu:
+            label = Variable(torch.LongTensor(label).cuda())
         label = Variable(torch.LongTensor(label))
         loss = F.nll_loss(output, label)
     elif loss_function == 'binary_cross_entropy_with_logits':
