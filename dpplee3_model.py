@@ -264,7 +264,7 @@ class AsynchronousWorker(object):
         #   ('fc2', nn.Linear(in_features=50, out_features=10, bias=True))
 
         # ]))
-        model = self.serialized_network
+        model = self.network
         epoch_num = self.train_config['epoch']
         batch_size = self.train_config['batch_size']
         sample_num = x_train.shape[0]
@@ -299,14 +299,18 @@ class AsynchronousWorker(object):
                     loss.backward()
                     optimizer.step()
                     # optimizer.zero_grad()
-                output1 = model(data)
-                loss1 = get_loss(self.loss_function, output1, target)
-                print(epoch,'~~~~~~~~~~',loss1)
-                state_dict_after_training = model.state_dict()
-                # print(state_dict_after_training, 'AAAAAAAAAAAAAAAAAAAAAAAAA')
-                updates = compute_updates(state_dict_before_training, state_dict_after_training)
-                # print(updates, 'update delta to parameter server~~')
-                self.get_post.post_updates_to_server(updates)
+
+                cnt = cnt+1
+                if cnt == self.frequency_num:
+                    eval_output = model(data)
+                    eval_loss = get_loss(self.loss_function, eval_output, target)
+                    print(epoch, '------------', eval_loss)
+                    state_dict_after_training = model.state_dict()
+                    # print(state_dict_after_training, 'AAAAAAAAAAAAAAAAAAAAAAAAA')
+                    updates = compute_updates(state_dict_before_training, state_dict_after_training)
+                    # print(updates, 'update delta to parameter server~~')
+                    self.get_post.post_updates_to_server(updates)
+                    cnt = 0
         elif self.frequency == 'batch':
             for epoch in range(epoch_num):
                 for idx in range(batch_num):
@@ -323,9 +327,14 @@ class AsynchronousWorker(object):
                     loss = get_loss(self.loss_function, output, target)
                     loss.backward()
                     optimizer.step()
-                    state_dict_after_training = model.state_dict()
-                    updates = compute_updates(state_dict_before_training, state_dict_after_training)
-                    self.get_post.post_updates_to_server(updates)
+                    cnt = cnt+1
+                    if cnt == self.frequency_num:
+                        eval_output = model(data)
+                        eval_loss = get_loss(self.loss_function, eval_output, target)
+                        print(epoch, '------------', eval_loss)
+                        state_dict_after_training = model.state_dict()
+                        updates = compute_updates(state_dict_before_training, state_dict_after_training)
+                        self.get_post.post_updates_to_server(updates)
         else:
             print ('please choose the frequency of training')
 
@@ -362,6 +371,7 @@ class SynchronousWorker(object):
         sample_num = x_train.shape[0]
         batch_num = int(math.ceil(sample_num/float(batch_size)))-5
 
+        model = self.network
         model.load_state_dict(self.state_dict)
         optimizer = get_optimizer(self.worker_optimizer, self.optimizer_config, model.parameters())
         model.train()
