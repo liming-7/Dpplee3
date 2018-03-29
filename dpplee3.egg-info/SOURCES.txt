@@ -14,5 +14,4 @@ dpplee3/worker.py
 dpplee3.egg-info/PKG-INFO
 dpplee3.egg-info/SOURCES.txt
 dpplee3.egg-info/dependency_links.txt
-dpplee3.egg-info/requires.txt
 dpplee3.egg-info/top_level.txt

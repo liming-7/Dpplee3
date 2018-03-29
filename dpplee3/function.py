@@ -12,6 +12,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.autograd import Variable
 
+from .optimizer import Adadelta, Adagrad, Adam, Adamax, ASGD, LBFGS, RMSprop, Rprop, SGD, SparseAdam
+
 def compute_updates(p1, p2):
     '''
     compute updates or the changes of two state_dict.
@@ -84,6 +86,199 @@ def get_loss(loss_function, output, label, use_gpu):
         loss = F.binary_cross_entropy_with_logits(output, label)
 
     return loss
+
+def get_modified_optimizer(optimizer, optimizer_config, params):
+    '''
+    get the optimizer of worker model
+    '''
+    if optimizer == 'SGD':
+        p = ['lr', 'momentum', 'dampening', 'weight_decay', 'nesterov']
+        keys = list(optimizer_config.keys())
+        unde = list(set(p)^set(keys))
+        for i in unde:
+            if i == 'nesterov':
+                optimizer_config[i] = False
+            else:
+                optimizer_config[i] = 0
+
+        opti = SGD(params, lr=optimizer_config['lr'], momentum=optimizer_config['momentum'],
+                dampening=optimizer_config['dampening'], weight_decay=optimizer_config['weight_decay'],
+                nesterov=optimizer_config['nesterov'])
+        return opti
+
+    elif optimizer=='Rprop':
+        p = ['lr', 'etas', 'step_sizes']
+        keys = list(optimizer_config.keys())
+        unde = list(set(p)^set(keys))
+        for i in unde:
+            if i == 'lr':
+                optimizer_config[i] = 1e-2
+            elif i == 'etas':
+                optimizer_config[i] = (0.5, 1.2)
+            elif i =='step_sizes':
+                optimizer_config[i] = (1e-6, 50)
+
+        opti = Rprop(params, lr=optimizer_config['lr'], etas=optimizer_config['etas'], step_sizes=optimizer_config['step_sizes'])
+        return opti
+
+    elif optimizer=='RMSprop':
+        p = ['lr', 'alpha', 'eps', 'weight_decay', 'momentum', 'centered']
+        keys = list(optimizer_config.keys())
+        unde = list(set(p)^set(keys))
+        for i in unde:
+            if i == 'lr':
+                optimizer_config[i] = 1e-2
+            elif i == 'alpha':
+                optimizer_config[i] = 0.99
+            elif i == 'eps':
+                optimizer_config[i] = 1e-8
+            elif i == 'weight_decay':
+                optimizer_config[i] = 0
+            elif i == 'momentum':
+                optimizer_config[i] = 0
+            elif i == 'centered':
+                optimizer_config[i] = False
+
+        opti = RMSprop(params, lr=optimizer_config['lr'], alpha=optimizer_config['alpha'],
+                eps=optimizer_config['eps'], weight_decay=optimizer_config['weight_decay'],
+                momentum=optimizer_config['momentum'], centered = optimizer_config['centered'])
+        return opti
+
+    elif optimizer=='LBFGS':
+        p = ['lr', 'max_iter', 'max_eval', 'tolerance_grad', 'tolerance_change', 'history_size', 'line_search_fn']
+        keys = list(optimizer_config.keys())
+        unde = list(set(p)^set(keys))
+        for i in unde:
+            if i == 'lr':
+                optimizer_config[i] = 1
+            elif i == 'max_iter':
+                optimizer_config[i] = 20
+            elif i == 'max_eval':
+                optimizer_config[i] = None
+            elif i == 'tolerance_grad':
+                optimizer_config[i] = 1e-5
+            elif i == 'tolerance_change':
+                optimizer_config[i] = 1e-9
+            elif i == 'history_size':
+                optimizer_config[i] = 100
+            elif i == 'line_search_fn':
+                optimizer_config[i] = None
+
+        opti = LBFGS(params, lr=optimizer_config['lr'], max_iter=optimizer_config['max_iter'],
+                tolerance_grad=optimizer_config['tolerance_grad'], tolerance_change=optimizer_config['tolerance_change'],
+                history_size=optimizer_config['history_size'], line_search_fn = optimizer_config['line_search_fn'])
+        return opti
+
+    elif optimizer=='ASGD':
+        p = ['lr', 'lambd', 'alpha', 't0', 'weight_decay']
+        keys = list(optimizer_config.keys())
+        unde = list(set(p)^set(keys))
+        for i in unde:
+            if i == 'lr':
+                optimizer_config[i] = 1e-2
+            elif i == 'lambd':
+                optimizer_config[i] = 1e-4
+            elif i == 'alpha':
+                optimizer_config[i] = 0.75
+            elif i == 't0':
+                optimizer_config[i] = 1e-6
+            elif i == 'weight_decay':
+                optimizer_config[i] = 0
+
+        opti = ASGD(params, lr=optimizer_config['lr'], lambd=optimizer_config['lambd'],
+                alpha=optimizer_config['alpha'], t0=optimizer_config['t0'],
+                weight_decay=optimizer_config['weight_decay'])
+        return opti
+
+    elif optimizer=='Adamax':
+        p = ['lr', 'betas', 'eps', 'weight_decay']
+        keys = list(optimizer_config.keys())
+        unde = list(set(p)^set(keys))
+        for i in unde:
+            if i == 'lr':
+                optimizer_config[i] = 0.002
+            elif i == 'betas':
+                optimizer_config[i] = (0.9, 0.999)
+            elif i == 'eps':
+                optimizer_config[i] = 1e-08
+            elif i == 'weight_decay':
+                optimizer_config[i] = 0
+
+
+        opti = Adamax(params, lr=optimizer_config['lr'], betas=optimizer_config['betas'],
+                eps=optimizer_config['eps'], weight_decay=optimizer_config['weight_decay'])
+        return opti
+
+    elif optimizer=='SparseAdam':
+        p = ['lr', 'betas', 'eps']
+        keys = list(optimizer_config.keys())
+        unde = list(set(p)^set(keys))
+        for i in unde:
+            if i == 'lr':
+                optimizer_config[i] = 0.001
+            elif i == 'betas':
+                optimizer_config[i] = (0.9, 0.999)
+            elif i == 'eps':
+                optimizer_config[i] = 1e-08
+
+        opti = SparseAdam(params, lr=optimizer_config['lr'], betas=optimizer_config['betas'],
+                eps=optimizer_config['eps'])
+        return opti
+
+    elif optimizer=='Adam':
+        p = ['lr', 'betas', 'eps', 'weight_decay']
+        keys = list(optimizer_config.keys())
+        unde = list(set(p)^set(keys))
+        for i in unde:
+            if i == 'lr':
+                optimizer_config[i] = 0.001
+            elif i == 'betas':
+                optimizer_config[i] = (0.9, 0.999)
+            elif i == 'eps':
+                optimizer_config[i] = 1e-08
+            elif i == 'weight_decay':
+                optimizer_config[i] = 0
+
+        opti = Adam(params, lr=optimizer_config['lr'], betas=optimizer_config['betas'],
+                eps=optimizer_config['eps'], weight_decay=optimizer_config['weight_decay'])
+        return opti
+
+    elif optimizer=='Adagrad':
+        p = ['lr', 'lr_decay', 'weight_decay']
+        keys = list(optimizer_config.keys())
+        unde = list(set(p)^set(keys))
+        for i in unde:
+            if i == 'lr':
+                optimizer_config[i] = 0.01
+            elif i == 'lr_decay':
+                optimizer_config[i] = 0
+            elif i == 'weight_decay':
+                optimizer_config[i] = 0
+
+        opti = Adagrad(params, lr=optimizer_config['lr'], lr_decay=optimizer_config['lr_decay'],
+                weight_decay=optimizer_config['weight_decay'])
+        return opti
+
+    elif optimizer=='Adadelta':
+        p = ['lr', 'rho', 'eps', 'weight_decay']
+        keys = list(optimizer_config.keys())
+        unde = list(set(p)^set(keys))
+        for i in unde:
+            if i == 'lr':
+                optimizer_config[i] = 1.0
+            elif i == 'rho':
+                optimizer_config[i] = 0.9
+            elif i == 'eps':
+                optimizer_config[i] = 1e-06
+            elif i == 'weight_decay':
+                optimizer_config[i] = 0
+
+        opti = Adadelta(params, lr=optimizer_config['lr'], rho=optimizer_config['rho'],
+                eps=optimizer_config['eps'], weight_decay=optimizer_config['weight_decay'])
+        return opti
+
+    else:
+        raise ValueError('the optimizer is exactly the same as the original pytorch, please check again!')
 
 def get_optimizer(optimizer, optimizer_config, params):
     '''

@@ -22,8 +22,8 @@ from .rwlock import RWLock
 from .pg_weights import Get_post_state_dict
 # from Dpplee3.worker import AsynchronousWorker, SynchronousWorker
 
-from .function import compute_updates, get_loss, get_optimizer
-from .optimizer import SGD
+from .function import compute_updates, get_loss, get_optimizer, get_modified_optimizer
+# from .optimizer import SGD
 
 import torch
 import torch.nn as nn
@@ -34,14 +34,14 @@ import math
 
 
 class Dpplee3_model(object):
-    def __init__(self, sc, model, frequency, server_optimizer, worker_optimizer, loss_function, mode, worker_num, frequency_num=1, save_path = None):
+    def __init__(self, sc, model, frequency, loss_function, mode, worker_num, frequency_num=1, save_path = None):
         self.spark_context = sc
         self.master_network = model
         self.state_dict = model.state_dict()
         self.network = model
         self.frequency = frequency
         self.mode = mode
-        self.worker_optimizer = worker_optimizer
+        # self.worker_optimizer = worker_optimizer
         self.loss_function = loss_function
         self.mode = mode
         self.worker_num = worker_num
@@ -56,7 +56,8 @@ class Dpplee3_model(object):
         ''''''
         self.server_optimizer = server_optimizer
         server_optimizer_config = arg
-        self.optimizer = get_optimizer(self.server_optimizer, server_optimizer_config, self.master_network.parameters())
+        self.optimizer = get_modified_optimizer(self.server_optimizer, server_optimizer_config, self.master_network.parameters())
+        print(self.optimizer)
         return server_optimizer_config
 
     def set_worker_optimizer(self, worker_optimizer, **arg):
@@ -282,6 +283,7 @@ class AsynchronousWorker(object):
             for epoch in range(epoch_num):
                 state_dict_before_training = self.get_post.get_server_state_dict()
                 print('get_server_state_dict')
+                # print(state_dict_before_training)
                 model.load_state_dict(state_dict_before_training)
                 optimizer = get_optimizer(self.worker_optimizer, self.optimizer_config, model.parameters())
                 model.train()
@@ -313,7 +315,7 @@ class AsynchronousWorker(object):
                 cnt = cnt+1
                 if cnt == self.frequency_num:
                     eval_output = model(data)
-                    eval_loss = get_loss(self.loss_function, eval_output, target)
+                    eval_loss = get_loss(self.loss_function, eval_output, target, use_gpu)
                     print(epoch, '------------', eval_loss)
                     state_dict_after_training = model.state_dict()
                     # print(state_dict_after_training, 'AAAAAAAAAAAAAAAAAAAAAAAAA')
@@ -321,6 +323,7 @@ class AsynchronousWorker(object):
                     # print(updates, 'update delta to parameter server~~')
                     self.get_post.post_updates_to_server(updates)
                     cnt = 0
+
         elif self.frequency == 'batch':
             for epoch in range(epoch_num):
                 for idx in range(batch_num):
@@ -337,13 +340,13 @@ class AsynchronousWorker(object):
                     target = Variable(torch.Tensor(target))
                     optimizer.zero_grad()
                     output = model(data)
-                    loss = get_loss(self.loss_function, output, target)
+                    loss = get_loss(self.loss_function, output, target, use_gpu)
                     loss.backward()
                     optimizer.step()
                     cnt = cnt+1
                     if cnt == self.frequency_num:
                         eval_output = model(data)
-                        eval_loss = get_loss(self.loss_function, eval_output, target)
+                        eval_loss = get_loss(self.loss_function, eval_output, target,use_gpu)
                         print(epoch, '------------', eval_loss)
                         state_dict_after_training = model.state_dict()
                         updates = compute_updates(state_dict_before_training, state_dict_after_training)
